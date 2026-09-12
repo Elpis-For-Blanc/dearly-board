@@ -138,6 +138,25 @@ main{background:
 }
 </style>
 
+
+<style id="dearly-export-fix-style">
+.board.export-clone{
+  transform:none!important;
+  transform-origin:top left!important;
+  margin:0!important;
+  max-width:none!important;
+  max-height:none!important;
+  flex:none!important;
+}
+.board.export-clone .selected{
+  outline:none!important;
+}
+.board.export-clone .handle,
+.board.export-clone .rotate-handle{
+  display:none!important;
+}
+</style>
+
 </head><body><div class="app"><aside class="panel"><div class="brand">DEARLY BOARD</div><div class="tag">좋아하는 것들로 채우는 우리만의 보드.</div>
 <div class="sec"><h3>BOARD STYLE</h3><select id="theme" class="field"><option value="princess">PRINCESS PINK</option><option value="cork">CORK BOARD</option><option value="minimal">MINIMAL</option><option value="dark">DARK</option><option value="y2k">Y2K</option><option value="vintage">VINTAGE</option><option value="cloud">CLOUD</option><option value="night">MIDNIGHT</option><option value="letter">LETTER PAPER</option><option value="scrapbook">SCRAPBOOK</option><option value="rose">DUSTY ROSE</option><option value="sky">POWDER SKY</option><option value="matcha">MATCHA CREAM</option><option value="cherry">CHERRY RED</option><option value="lilac">LILAC DREAM</option><option value="metal">SILVER METAL</option></select><div class="row ratio-row">
 <button data-size="1:1">1:1</button>
@@ -380,7 +399,93 @@ $('#wallBtn').onclick=()=>$('#wallInput').click();$('#wallInput').onchange=()=>{
 function apply(){if(!selected)return;selected.dataset.rot=rot.value;selected.dataset.opacity=opacity.value/100;transform(selected)}rot.oninput=apply;opacity.oninput=apply;rot.onchange=snap;opacity.onchange=snap;
 $('#front').onclick=()=>{if(selected){selected.style.zIndex=++z;snap()}};$('#back').onclick=()=>{if(selected){selected.style.zIndex=1;snap()}};$('#del').onclick=()=>{if(selected){selected.remove();selected=null;snap()}};$('#flip').onclick=()=>{if(selected){selected.dataset.flip=selected.dataset.flip==='1'?'0':'1';transform(selected);snap()}};$('#dup').onclick=()=>{if(!selected)return;let c=selected.cloneNode(true);c.classList.remove('selected');c.style.left=selected.offsetLeft+25+'px';c.style.top=selected.offsetTop+25+'px';board.appendChild(c);wire(c);select(c);snap()};
 $('#undo').onclick=()=>{if(history.length<=1)return;future.push(history.pop());restore(history[history.length-1])};$('#redo').onclick=()=>{if(!future.length)return;let h=future.pop();history.push(h);restore(h)};$('#clear').onclick=()=>{if(confirm('보드의 모든 요소를 비우시겠습니까?')){board.querySelectorAll('.item').forEach(x=>x.remove());select(null);snap()}};
-$('#save').onclick=async()=>{select(null);board.classList.add('hidden-export');try{let c=await html2canvas(board,{scale:3,useCORS:true,allowTaint:false,backgroundColor:null,logging:false});let a=document.createElement('a');a.download='DEARLY_BOARD.png';a.href=c.toDataURL('image/png');a.click()}catch(e){alert('PNG 저장 중 문제가 발생했습니다.')}finally{board.classList.remove('hidden-export')}};
+async function waitForBoardAssets(root){
+  if(document.fonts && document.fonts.ready){
+    try{await document.fonts.ready}catch(e){}
+  }
+  const imgs=[...root.querySelectorAll('img')];
+  await Promise.all(imgs.map(async img=>{
+    if(!img.complete){
+      await new Promise(resolve=>{
+        img.addEventListener('load',resolve,{once:true});
+        img.addEventListener('error',resolve,{once:true});
+      });
+    }
+    if(img.decode){
+      try{await img.decode()}catch(e){}
+    }
+  }));
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+}
+
+async function exportBoardPng(){
+  select(null);
+
+  const exportW=Number(board.dataset.exportWidth)||board.offsetWidth;
+  const exportH=Number(board.dataset.exportHeight)||board.offsetHeight;
+
+  await waitForBoardAssets(board);
+
+  const clone=board.cloneNode(true);
+  clone.id='board-export-clone';
+  clone.classList.add('hidden-export','export-clone');
+  clone.style.width=exportW+'px';
+  clone.style.height=exportH+'px';
+  clone.style.position='fixed';
+  clone.style.left='-100000px';
+  clone.style.top='0';
+  clone.style.zIndex='-99999';
+  clone.style.transform='none';
+  clone.style.margin='0';
+  clone.style.flex='none';
+
+  clone.querySelectorAll('.selected').forEach(x=>x.classList.remove('selected'));
+  clone.querySelectorAll('.handle,.rotate-handle').forEach(x=>x.remove());
+
+  document.body.appendChild(clone);
+
+  try{
+    await waitForBoardAssets(clone);
+
+    const canvas=await html2canvas(clone,{
+      scale:3,
+      useCORS:true,
+      allowTaint:false,
+      backgroundColor:null,
+      logging:false,
+      width:exportW,
+      height:exportH,
+      windowWidth:Math.max(document.documentElement.clientWidth,exportW+100),
+      windowHeight:Math.max(document.documentElement.clientHeight,exportH+100),
+      scrollX:0,
+      scrollY:0
+    });
+
+    const blob=await new Promise((resolve,reject)=>{
+      canvas.toBlob(b=>b?resolve(b):reject(new Error('PNG 생성 실패')),'image/png');
+    });
+
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.download='DEARLY_BOARD.png';
+    a.href=url;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }finally{
+    clone.remove();
+  }
+}
+
+$('#save').onclick=async()=>{
+  try{
+    await exportBoardPng();
+  }catch(e){
+    console.error(e);
+    alert('PNG 저장 중 문제가 발생했습니다.');
+  }
+};
 
 </script>
 <!-- DEARLY_BOARD_AI_OOC_START -->
